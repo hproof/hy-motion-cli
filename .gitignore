@@ -1,0 +1,28 @@
+# Binary output
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go build output
+/hy-motion-cli
+hy-motion-cli
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local config (contains credentials)
+.hy-motion-cli.toml
+
+# Claude Code
+.claude/
+
+# Test data / motion files
+*.fbx
