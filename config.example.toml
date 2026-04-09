@@ -1,0 +1,9 @@
+# HY-Motion CLI Configuration
+
+[api]
+url = "http://your-ecs-ip:8000"
+timeout = 30
+
+[auth]
+user_id = "your-user-id"
+token = "your-token"
