@@ -7,7 +7,7 @@
 从源码编译：
 
 ```bash
-git clone https://gitee.com/hproof/hy-motion-cli.git
+git clone https://github.com/hproof/hy-motion-cli.git
 cd hy-motion-cli
 go build -o hy-motion-cli.exe ./src
 ```
