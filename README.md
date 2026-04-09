@@ -12,6 +12,26 @@ cd hy-motion-cli
 go build -o hy-motion-cli.exe ./src
 ```
 
+### Go 模块代理配置（国内用户）
+
+由于国内访问 GitHub 较慢，建议配置国内 Go 模块代理：
+
+```bash
+go env -w GOPROXY=https://mirrors.aliyun.com/goproxy/,direct
+```
+
+### 交叉编译
+
+支持跨平台编译，示例：
+
+```bash
+# Linux 编译 Windows amd64
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o hy-motion-cli.exe ./src
+
+# macOS 编译 Linux amd64
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o hy-motion-cli ./src
+```
+
 ## 配置
 
 配置文件固定为 `.hy-motion-cli.toml`，程序会自动查找：

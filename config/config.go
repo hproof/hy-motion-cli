@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -70,6 +71,11 @@ func Load() (*Config, error) {
 	cfg = &Config{}
 	if err := viper.Unmarshal(cfg); err != nil {
 		return nil, fmt.Errorf("解析配置失败: %w", err)
+	}
+
+	// 修复缺少协议前缀的 URL
+	if !strings.HasPrefix(cfg.API.URL, "http://") && !strings.HasPrefix(cfg.API.URL, "https://") {
+		cfg.API.URL = "http://" + cfg.API.URL
 	}
 
 	return cfg, nil

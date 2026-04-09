@@ -57,6 +57,12 @@ func printUsage() {
 				"usage":       "hy-motion-cli queue",
 				"args":        "无参数",
 			},
+			{
+				"name":        "config",
+				"description": "交互式配置 CLI 设置",
+				"usage":       "hy-motion-cli config",
+				"args":        "无参数（交互式）",
+			},
 		},
 		"flags": []map[string]string{
 			{
