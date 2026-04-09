@@ -1,4 +1,4 @@
-# HY-Motion CLI Configuration
+# HY-Motion CLI 配置
 
 [api]
 url = "http://your-ecs-ip:8000"
