@@ -12,16 +12,8 @@ builds:
       - arm64
     ldflags:
       - -s -w
-    hooks:
-      post:
-        - cmd: upx -9 "{{ .Path }}"
-          filters:
-            exclude:
-              - '^windows-arm'
 checksum:
   name_template: 'checksums.txt'
-snapshot:
-  name_template: "{{ .Tag }}-next"
 changelog:
   sort: asc
   filters:
