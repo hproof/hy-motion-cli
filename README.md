@@ -2,6 +2,10 @@
 
 命令行工具，用于提交和管理动作生成任务。
 
+## 依赖
+
+本 CLI 依赖 [HY-Motion API](https://github.com/hproof/hy-motion-api)（FastAPI 后端服务）运行。请先部署该 API 服务。
+
 ## 安装
 
 从源码编译：

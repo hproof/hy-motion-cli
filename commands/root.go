@@ -19,6 +19,10 @@ var rootCmd = &cobra.Command{
 			printUsage()
 			os.Exit(0)
 		}
+		if version, _ := cmd.Flags().GetBool("version"); version {
+			fmt.Println(cliVersion)
+			os.Exit(0)
+		}
 		cmd.Help()
 	},
 }
@@ -74,6 +78,10 @@ func printUsage() {
 		},
 		"flags": []map[string]string{
 			{
+				"name":        "--version",
+				"description": "显示版本号",
+			},
+			{
 				"name":        "--usage",
 				"description": "输出机器可读的 usage 信息 (用于 AI 自动发现)",
 			},
@@ -105,4 +113,5 @@ func Execute() {
 func init() {
 	rootCmd.Flags().BoolP("usage", "", false, "输出机器可读的 usage 信息 (用于 AI 自动发现)")
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
+	rootCmd.Flags().Bool("version", false, "显示版本号")
 }
