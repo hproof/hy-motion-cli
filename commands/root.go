@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var cliVersion = "dev" // cliVersion 为编译时注入版本号，默认为 dev
+
 var rootCmd = &cobra.Command{
 	Use:   "hy-motion-cli",
 	Short: "HY-Motion CLI - 控制运动生成任务",
@@ -25,7 +27,7 @@ func printUsage() {
 	usage := map[string]interface{}{
 		"program": "hy-motion-cli",
 		"description": "HY-Motion CLI - 控制运动生成任务",
-		"version": "1.0.0",
+		"version": cliVersion,
 		"commands": []map[string]string{
 			{
 				"name":        "health",
@@ -62,6 +64,12 @@ func printUsage() {
 				"description": "交互式配置 CLI 设置",
 				"usage":       "hy-motion-cli config",
 				"args":        "无参数（交互式）",
+			},
+			{
+				"name":        "upgrade",
+				"description": "升级 CLI 到最新版本",
+				"usage":       "hy-motion-cli upgrade",
+				"args":        "无参数",
 			},
 		},
 		"flags": []map[string]string{
