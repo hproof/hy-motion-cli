@@ -221,7 +221,7 @@ func installBinary(tmpPath string) error {
 	}
 
 	if runtime.GOOS == "windows" {
-		return installWindows(newPath, execPath, tmpDir)
+		return installWindows(newPath, execPath, tmpDir, tmpPath)
 	} else {
 		return installUnix(newPath, execPath, tmpDir)
 	}
@@ -276,33 +276,80 @@ func findBinary(tmpDir string) (string, error) {
 	return "", fmt.Errorf("解压后未找到可执行文件")
 }
 
-func installWindows(newPath, execPath, tmpDir string) error {
-	// 创建安装脚本
-	scriptContent := fmt.Sprintf(`@echo off
-ping 127.0.0.1 -n 2 >nul
-copy /Y "%s" "%s"
-if errorlevel 1 (
-    ping 127.0.0.1 -n 2 >nul
-    copy /Y "%s" "%s"
-)
-del "%s"
-rmdir /S /Q "%s"
-del "%%~f0"
-`, newPath, execPath, newPath, execPath, newPath, tmpDir)
-
-	scriptPath := filepath.Join(os.TempDir(), "hy-motion-cli-upgrade.bat")
-	if err := os.WriteFile(scriptPath, []byte(scriptContent), 0644); err != nil {
-		return fmt.Errorf("创建安装脚本失败: %w", err)
+func installWindows(newPath, execPath, tmpDir, tmpFile string) error {
+	quoteBatchValue := func(path string) string {
+		return strings.ReplaceAll(path, "%", "%%")
 	}
 
-	// 启动脚本并退出
-	cmd := exec.Command("cmd", "/c", "start", "/B", scriptPath)
+	logPath := filepath.Join(os.TempDir(), "hy-motion-cli-upgrade.log")
+	scriptContent := fmt.Sprintf(`@echo off
+setlocal EnableExtensions EnableDelayedExpansion
+set "SRC=%s"
+set "DST=%s"
+set "ARCHIVE=%s"
+set "TMPDIR=%s"
+set "LOG=%s"
+
+call :log "upgrade script started"
+call :log "src=%%SRC%%"
+call :log "dst=%%DST%%"
+call :log "archive=%%ARCHIVE%%"
+call :log "tmpdir=%%TMPDIR%%"
+if exist "%%SRC%%" (call :log "source exists") else (call :log "source missing")
+if exist "%%DST%%" (call :log "target exists before replace") else (call :log "target missing before replace")
+
+for /L %%%%I in (1,1,20) do (
+	call :log "copy attempt %%%%I"
+	copy /Y "%%SRC%%" "%%DST%%" >nul 2>nul && goto installed
+	call :log "copy failed errorlevel=!errorlevel!"
+	ping 127.0.0.1 -n 2 >nul
+)
+
+call :log "upgrade failed after retries"
+goto cleanup
+
+:installed
+call :log "copy succeeded"
+del /Q "%%ARCHIVE%%" >nul 2>nul
+call :log "delete archive errorlevel=!errorlevel!"
+del /Q "%%SRC%%" >nul 2>nul
+call :log "delete extracted exe errorlevel=!errorlevel!"
+rmdir /S /Q "%%TMPDIR%%" >nul 2>nul
+call :log "remove temp dir errorlevel=!errorlevel!"
+
+:cleanup
+call :log "script cleanup"
+del "%%~f0" >nul 2>nul
+exit /b
+
+:log
+>>"%%LOG%%" echo [%%date%% %%time%%] %%~1
+exit /b
+`, quoteBatchValue(newPath), quoteBatchValue(execPath), quoteBatchValue(tmpFile), quoteBatchValue(tmpDir), quoteBatchValue(logPath))
+
+	scriptFile, err := os.CreateTemp("", "hy-motion-cli-upgrade-*.bat")
+	if err != nil {
+		return fmt.Errorf("创建安装脚本失败: %w", err)
+	}
+	scriptPath := scriptFile.Name()
+
+	if _, err := scriptFile.WriteString(scriptContent); err != nil {
+		scriptFile.Close()
+		os.Remove(scriptPath)
+		return fmt.Errorf("写入安装脚本失败: %w", err)
+	}
+	if err := scriptFile.Close(); err != nil {
+		os.Remove(scriptPath)
+		return fmt.Errorf("关闭安装脚本失败: %w", err)
+	}
+
+	cmd := exec.Command("cmd", "/c", "start", "", "/b", "cmd", "/c", scriptPath)
 	if err := cmd.Start(); err != nil {
 		os.Remove(scriptPath)
 		return fmt.Errorf("启动安装脚本失败: %w", err)
 	}
 
-	fmt.Println("正在升级，请稍候...")
+	fmt.Printf("正在升级，当前进程退出后会完成替换；日志: %s\n", logPath)
 	os.Exit(0)
 	return nil
 }

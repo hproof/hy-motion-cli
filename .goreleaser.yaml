@@ -9,7 +9,7 @@ builds:
       - amd64
     ldflags:
       - -s -w
-      - -X github.com/hproof/hy-motion-cli/commands.cliVersion={{.Version}}
+      - -X hy-motion-cli/commands.cliVersion={{.Version}}
 checksum:
   name_template: 'checksums.txt'
 changelog:
