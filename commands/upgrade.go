@@ -164,25 +164,70 @@ func installBinary(tmpPath string) error {
 		return fmt.Errorf("解压失败: %w", err)
 	}
 
-	// 查找解压后的 exe 文件
-	entries, err := os.ReadDir(tmpDir)
+	// 查找解压后的二进制文件
+	newPath, err := findBinary(tmpDir)
 	if err != nil {
 		os.RemoveAll(tmpDir)
 		return err
 	}
-	var newPath string
+
+	if runtime.GOOS == "windows" {
+		return installWindows(newPath, execPath, tmpDir)
+	} else {
+		return installUnix(newPath, execPath, tmpDir)
+	}
+}
+
+// findBinary 查找解压后的正确二进制文件
+func findBinary(tmpDir string) (string, error) {
+	entries, err := os.ReadDir(tmpDir)
+	if err != nil {
+		return "", err
+	}
+
+	// 明确的二进制名称
+	var expectedName string
+	if runtime.GOOS == "windows" {
+		expectedName = "hy-motion-cli.exe"
+	} else {
+		expectedName = "hy-motion-cli"
+	}
+
+	// 先精确匹配二进制名称
 	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".exe") {
-			newPath = filepath.Join(tmpDir, entry.Name())
-			break
+		if entry.Name() == expectedName {
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			// 验证是常规文件
+			if info.Mode().IsRegular() {
+				return filepath.Join(tmpDir, entry.Name()), nil
+			}
 		}
 	}
 
-	if newPath == "" {
-		os.RemoveAll(tmpDir)
-		return fmt.Errorf("解压后未找到 exe 文件")
+	// 回退：Windows 匹配 .exe，Unix 匹配无扩展名的可执行文件
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			continue
+		}
+		name := entry.Name()
+		if runtime.GOOS == "windows" && strings.HasSuffix(name, ".exe") {
+			return filepath.Join(tmpDir, name), nil
+		} else if runtime.GOOS != "windows" && !strings.Contains(name, ".") {
+			return filepath.Join(tmpDir, name), nil
+		}
 	}
 
+	return "", fmt.Errorf("解压后未找到可执行文件")
+}
+
+func installWindows(newPath, execPath, tmpDir string) error {
 	// 创建安装脚本
 	scriptContent := fmt.Sprintf(`@echo off
 ping 127.0.0.1 -n 2 >nul
@@ -198,20 +243,96 @@ del "%%~f0"
 
 	scriptPath := filepath.Join(os.TempDir(), "hy-motion-cli-upgrade.bat")
 	if err := os.WriteFile(scriptPath, []byte(scriptContent), 0644); err != nil {
-		os.RemoveAll(tmpDir)
 		return fmt.Errorf("创建安装脚本失败: %w", err)
 	}
 
 	// 启动脚本并退出
 	cmd := exec.Command("cmd", "/c", "start", "/B", scriptPath)
 	if err := cmd.Start(); err != nil {
-		os.RemoveAll(tmpDir)
 		os.Remove(scriptPath)
 		return fmt.Errorf("启动安装脚本失败: %w", err)
 	}
 
 	fmt.Println("正在升级，请稍候...")
 	os.Exit(0)
+	return nil
+}
+
+func installUnix(newPath, execPath, tmpDir string) error {
+	// Unix 系统直接替换或原子替换
+	if err := os.Chmod(newPath, 0755); err != nil {
+		return err
+	}
+
+	// 尝试直接 rename
+	if err := os.Rename(newPath, execPath); err != nil {
+		// 检测是否是跨设备错误（EXDEV）
+		if linkErr, ok := err.(*os.LinkError); ok && linkErr.Err.Error() == "exe cross-device link" {
+			// 跨设备：复制到目标目录的临时文件，再原子替换
+			if err := atomicReplace(newPath, execPath); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+	os.RemoveAll(tmpDir)
+	return nil
+}
+
+// atomicReplace 原子替换：先复制到目标目录的临时文件，再 rename
+func atomicReplace(src, dst string) error {
+	// 在目标文件所在目录创建临时文件
+	tmpDir := filepath.Dir(dst)
+	tmpFile, err := os.CreateTemp(tmpDir, filepath.Base(dst)+".*")
+	if err != nil {
+		return fmt.Errorf("创建临时文件失败: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+
+	// 复制内容
+	srcFile, err := os.Open(src)
+	if err != nil {
+		tmpFile.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("打开源文件失败: %w", err)
+	}
+	defer srcFile.Close()
+
+	if _, err := io.Copy(tmpFile, srcFile); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("复制文件失败: %w", err)
+	}
+
+	// 确保数据写入磁盘
+	if err := tmpFile.Sync(); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("同步文件失败: %w", err)
+	}
+
+	tmpFile.Close()
+
+	// 设置正确的权限
+	info, err := os.Stat(src)
+	if err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Chmod(tmpPath, info.Mode()); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+
+	// 原子替换
+	if err := os.Rename(tmpPath, dst); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("替换文件失败: %w", err)
+	}
+
+	// 删除源文件
+	os.Remove(src)
 	return nil
 }
 
