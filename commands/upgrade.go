@@ -71,20 +71,39 @@ func getCurrentVersion() string {
 }
 
 func getLatestRelease() (tagName, downloadURL string, err error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/releases/latest", baseURL, owner, repo)
-	resp, err := http.Get(url)
+	// 通过重定向获取最新 release 的版本号
+	url := fmt.Sprintf("https://github.com/%s/%s/releases/latest", owner, repo)
+	resp, err := http.Head(url)
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// 获取重定向后的 URL
+	location := resp.Request.URL.String()
+
+	// 从 URL 中提取版本号，格式如: https://github.com/hproof/hy-motion-cli/releases/tag/v0.4.0
+	if idx := strings.LastIndex(location, "/tag/"); idx >= 0 {
+		tagName = strings.TrimPrefix(location[idx+len("/tag/"):], "v")
+	} else {
+		return "", "", fmt.Errorf("无法从 URL 解析版本: %s", location)
+	}
+
+	// 构造 release API URL 获取 assets
+	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases/tags/v%s", baseURL, owner, repo, tagName)
+	resp, err = http.Get(apiURL)
+	if err != nil {
+		return "", "", fmt.Errorf("请求失败: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", "", fmt.Errorf("请求失败: %d", resp.StatusCode)
+		// 如果 API 限速，尝试直接从 GitHub 下载页面解析
+		return getLatestReleaseFromPage(tagName)
 	}
 
 	var release struct {
-		TagName string `json:"tag_name"`
-		Assets  []struct {
+		Assets []struct {
 			Name               string `json:"name"`
 			BrowserDownloadURL string `json:"browser_download_url"`
 		} `json:"assets"`
@@ -93,9 +112,6 @@ func getLatestRelease() (tagName, downloadURL string, err error) {
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
 		return "", "", err
 	}
-
-	// 去掉 v 前缀
-	tagName = strings.TrimPrefix(release.TagName, "v")
 
 	// 查找匹配当前平台的二进制文件
 	osName := runtime.GOOS
@@ -117,6 +133,39 @@ func getLatestRelease() (tagName, downloadURL string, err error) {
 	}
 
 	return "", "", fmt.Errorf("未找到匹配 %s/%s 的二进制文件", osName, arch)
+}
+
+// getLatestReleaseFromPage 当 API 限速时，从 GitHub 页面直接解析下载链接
+func getLatestReleaseFromPage(tagName string) (string, string, error) {
+	osName := runtime.GOOS
+	arch := runtime.GOARCH
+
+	// 尝试所有支持的命名格式
+	patterns := []string{
+		fmt.Sprintf("hy-motion-cli_%s_%s_%s.tar.gz", tagName, osName, arch),
+		fmt.Sprintf("hy-motion-cli_%s_%s.tar.gz", osName, arch),
+		fmt.Sprintf("hy-motion-cli_%s_%s.exe", osName, arch),
+	}
+
+	var downloadURL string
+	for _, filename := range patterns {
+		url := fmt.Sprintf("https://github.com/%s/%s/releases/download/v%s/%s", owner, repo, tagName, filename)
+		// 用 HEAD 请求检查文件是否存在
+		resp, err := http.Head(url)
+		if err != nil {
+			continue
+		}
+		resp.Body.Close()
+		if resp.StatusCode == 200 {
+			downloadURL = url
+			break
+		}
+	}
+
+	if downloadURL == "" {
+		return "", "", fmt.Errorf("未找到匹配 %s/%s 的二进制文件", osName, arch)
+	}
+	return tagName, downloadURL, nil
 }
 
 func downloadFile(url string) (string, error) {
